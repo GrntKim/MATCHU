@@ -80,21 +80,20 @@ D가 위반을 찾으면 그 피드백을 들고 **C로 되돌아가 다시 생�
 | [`docs/mapping/REQ003-매핑에이전트.md`](docs/mapping/REQ003-매핑에이전트.md) | B | 개념-단원 매핑 — 후보 중 최적 비유 선택 및 양방향 매핑 |
 | [`docs/lesson_generate/REQ004-교안생성.md`](docs/lesson_generate/REQ004-교안생성.md) | C | 교안·활동지 생성 — 동기유발-본활동-정리-평가 구성, 결과 화면, DOCX 내보내기 |
 | [`docs/validate/REQ005-검증.md`](docs/validate/REQ005-검증.md) | D | 난이도·제약 검증 — 금지 용어 검사, 재생성 피드백 루프 |
-| [`docs/infra/REQ006-인프라.md`](docs/infra/REQ006-인프라.md) | E | 배포 아키텍처, 공통 유틸리티, 웹 인터페이스 셸, 시각 처리 규약(저장 UTC / 표시 KST) |
+| [`docs/infra/REQ006-인프라.md`](docs/infra/REQ006-인프라.md) | E | 배포 아키텍처, 공통 유틸리티, 계정·이력·사용량 관리, 웹 인터페이스, 시각 처리 규약(저장 UTC / 표시 KST) |
 | [`docs/infra/REQ006-DB접속안내.md`](docs/infra/REQ006-DB접속안내.md) | E | 로컬에서 Cloud SQL에 붙는 절차와 오류 대응 |
+| [`docs/infra/REQ006-DB스키마.md`](docs/infra/REQ006-DB스키마.md) | E | 운영 DB의 실제 테이블·확장·인덱스 정본. DB를 재구축할 때 이 문서를 따릅니다 |
 | [`docs/measurements/2026-08-10-a1-recheck.md`](docs/measurements/2026-08-10-a1-recheck.md) | A2 | A2 검색 성능 재측정 기록 |
 
 읽는 순서: **REQ006-인프라 → REQ001 → REQ002 → REQ003 → REQ004 → REQ005**.
 전체 구조를 먼저 잡고 파이프라인 순서대로 따라가는 순서입니다. 로컬에서 코드를
-돌려볼 목적이라면 REQ006-DB접속안내부터 보면 됩니다.
+돌려볼 목적이라면 REQ006-DB접속안내부터, DB를 처음부터 세울 목적이라면
+REQ006-DB스키마부터 보면 됩니다.
 
 A2 검색 엔진의 실험 기록(임베딩 모델 벤치마킹, 골든셋, 학년 가중치 스윕)은
 `docs/`가 아니라 [`curriculum-search-engine/`](curriculum-search-engine/)에 있으며,
 특히 [`RS-006_검색구조_의사결정_기록.md`](curriculum-search-engine/RS-006_검색구조_의사결정_기록.md)에
 검색 구조를 왜 그렇게 정했는지가 정리돼 있습니다.
-
-> REQ006-인프라 문서의 도메인 관련 서술(Cloudflare 경유)은 실제 구성과 다릅니다.
-> 실제로는 Cloudflare를 쓰지 않으며 `run.app` 주소를 그대로 씁니다.
 
 ## 사전 준비물
 
@@ -245,6 +244,10 @@ gcloud config set project <프로젝트ID>
 ```
 
 > 두 번째 명령을 생략하면 Proxy 실행 시 `Project ... has been deleted` 403이 발생합니다. 계정 재분배 이전 프로젝트가 자격증명에 남아 있어서입니다.
+
+DB에는 `vector`(임베딩)·`pgcrypto`(`gen_random_uuid()`) 확장이 설치되어 있어야
+하며, 관리자가 스키마와 함께 1회 설치합니다. 테이블·확장·인덱스 전체 정의는
+[`docs/infra/REQ006-DB스키마.md`](docs/infra/REQ006-DB스키마.md)를 참고하세요.
 
 상세 절차와 오류 대응은 [`docs/infra/REQ006-DB접속안내.md`](docs/infra/REQ006-DB접속안내.md)를 참고하세요.
 
@@ -407,6 +410,11 @@ Dockerfile의 실행 명령에 `--proxy-headers --forwarded-allow-ips '*'`가 �
 
 각 타입에는 소유자 주석이 있으며, 소유자가 아닌 사람이 필드를 변경하려면 팀 채널 합의가 필요합니다. 변경 시 팀 채널에 공지하고 전원에게 즉시 pull을 요청합니다.
 
+DB 스키마의 정본은 `app/lib/types.py`가 아니라
+[`docs/infra/REQ006-DB스키마.md`](docs/infra/REQ006-DB스키마.md)입니다. 코드에
+DDL을 포함하지 않는 것이 팀 규약이므로, 테이블·컬럼·제약을 확인할 때는 이
+문서를 봅니다.
+
 ### 파일 소유 경계
 
 자신이 담당하는 폴더의 파일만 수정합니다. 다른 폴더의 수정이 필요해 보이면 직접 고치지 말고 담당자에게 요청합니다.
@@ -483,9 +491,11 @@ D와 E는 한 사람이 겸임하지만 브랜치와 PR은 역할별로 분리�
 
 - `.venv`, `.env`, `__pycache__`는 각자 로컬에만 존재하며 Git에 포함되지 않습니다.
 - 데이터베이스는 팀 전체가 공유하는 단일 Cloud SQL 인스턴스를 사용합니다. 별도의 개인 DB를 만들 필요는 없습니다.
-- 앱 계정(`app_user`)은 `SELECT` / `INSERT` / `UPDATE` / `DELETE`가 가능하며,
-  **DDL은 거부됩니다.** 의도된 설정입니다. 스키마 변경이 필요하면 인프라 담당자에게
-  요청하세요. (생성 이력 삭제는 하드 DELETE가 아니라 soft-delete이며, 실제
+- 앱 계정(`app_user`)에는 `SELECT` / `INSERT` / `UPDATE` / `DELETE`만
+  부여되어 있으며, **DDL 권한은 애초에 부여하지 않습니다.** 스키마 변경이
+  필요하면 인프라 담당자에게 요청하세요. 테이블·확장·인덱스 전체는
+  [`docs/infra/REQ006-DB스키마.md`](docs/infra/REQ006-DB스키마.md)를 정본으로
+  삼습니다. (생성 이력 삭제는 하드 DELETE가 아니라 soft-delete이며, 실제
   `DELETE`가 쓰이는 곳은 로그아웃 시 세션 레코드 삭제입니다.)
 - 생성 횟수에 제한이 있습니다(일 5회 / 주 15회, 관리자 계정은 예외).
 - 이 저장소는 학생 팀 프로젝트 프로토타입입니다. 생성된 교안의 교육적 효과는
